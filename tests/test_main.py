@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 import main
 
 def test_try_import_pypdf_has_pypdf():
+    """Test importing pypdf when it is available in the environment."""
     # pypdf is installed in this environment
     lib, name = main.try_import_pypdf()
     assert name == "pypdf"
@@ -12,6 +13,7 @@ def test_try_import_pypdf_has_pypdf():
 
 @patch.dict('sys.modules', {'pypdf': None})
 def test_try_import_pypdf_has_pypdf2_no_pypdf():
+    """Test falling back to PyPDF2 when pypdf is not available."""
     # Hide pypdf, leaving PyPDF2
     lib, name = main.try_import_pypdf()
     assert name == "PyPDF2"
@@ -19,22 +21,26 @@ def test_try_import_pypdf_has_pypdf2_no_pypdf():
 
 @patch.dict('sys.modules', {'pypdf': None, 'PyPDF2': None})
 def test_try_import_pypdf_has_pdfplumber_only():
+    """Test importing pdfplumber when pypdf and PyPDF2 are missing."""
     lib, name = main.try_import_pypdf()
     assert name == "pdfplumber"
     assert lib is not None
 
 @patch.dict('sys.modules', {'pypdf': None, 'PyPDF2': None, 'pdfplumber': None})
 def test_try_import_pypdf_has_none():
+    """Test returning None when no supported PDF library is found."""
     lib, name = main.try_import_pypdf()
     assert name is None
     assert lib is None
 
 def test_scrub_with_pypdf_pdfplumber_fallback(caplog):
+    """Test that pdfplumber triggers a fallback warning without modifying files."""
     result = main.scrub_with_pypdf(None, "pdfplumber", "in.pdf", "out.pdf")
     assert result is False
     assert "pdfplumber found but writing requires pypdf/PyPDF2. Falling back to regex" in caplog.text
 
 def test_scrub_with_pypdf_success():
+    """Test successful metadata scrubbing using a mocked pypdf library."""
     mock_pdf_lib = MagicMock()
     mock_reader = MagicMock()
     mock_writer = MagicMock()
@@ -61,6 +67,7 @@ def test_scrub_with_pypdf_success():
     mock_writer.write.assert_called_once()
 
 def test_scrub_with_pypdf_exception(caplog):
+    """Test handling of a general exception during pypdf scrubbing."""
     mock_pdf_lib = MagicMock()
     mock_pdf_lib.PdfReader.side_effect = Exception("File read error")
     
@@ -69,6 +76,7 @@ def test_scrub_with_pypdf_exception(caplog):
     assert "Error using pypdf: File read error" in caplog.text
 
 def test_scrub_with_pypdf_file_not_found(caplog):
+    """Test handling of FileNotFoundError during pypdf scrubbing."""
     mock_pdf_lib = MagicMock()
     mock_pdf_lib.PdfReader.side_effect = FileNotFoundError()
     
@@ -77,6 +85,7 @@ def test_scrub_with_pypdf_file_not_found(caplog):
     assert "Error using pypdf: File not found" in caplog.text
 
 def test_scrub_with_pypdf_permission_error(caplog):
+    """Test handling of PermissionError during pypdf scrubbing."""
     mock_pdf_lib = MagicMock()
     mock_pdf_lib.PdfReader.side_effect = PermissionError()
     
@@ -85,6 +94,7 @@ def test_scrub_with_pypdf_permission_error(caplog):
     assert "Error using pypdf: Permission denied" in caplog.text
 
 def test_scrub_with_pypdf_os_error(caplog):
+    """Test handling of OSError during pypdf scrubbing."""
     mock_pdf_lib = MagicMock()
     mock_pdf_lib.PdfReader.side_effect = OSError("OS Error")
     
@@ -93,28 +103,34 @@ def test_scrub_with_pypdf_os_error(caplog):
     assert "Error using pypdf: OS error occurred" in caplog.text
 
 def test_validate_paths_invalid_type():
+    """Test path validation raises TypeError for non-string inputs."""
     with pytest.raises(TypeError):
         main.validate_paths(123, "out.pdf")
 
 def test_validate_paths_empty_string():
+    """Test path validation raises ValueError for empty strings."""
     with pytest.raises(ValueError):
         main.validate_paths("  ", "out.pdf")
 
 def test_validate_paths_identical():
+    """Test path validation raises ValueError for identical input/output paths."""
     with pytest.raises(ValueError):
         main.validate_paths("in.pdf", "in.pdf")
 
 def test_scrub_with_pypdf_validation_error(caplog):
+    """Test pypdf scrubbing handles validation errors gracefully."""
     result = main.scrub_with_pypdf(MagicMock(), "pypdf", 123, "out.pdf")
     assert result is False
     assert "Validation Error:" in caplog.text
 
 def test_scrub_with_regex_validation_error(caplog):
+    """Test regex scrubbing handles validation errors gracefully."""
     result = main.scrub_with_regex("in.pdf", "in.pdf")
     assert result is False
     assert "Validation Error:" in caplog.text
 
 def test_scrub_with_regex_success():
+    """Test successful metadata scrubbing using the regex fallback."""
     input_data = b"""
     %PDF-1.4
     /Author (Secret Author \\(hidden\\))
@@ -160,6 +176,7 @@ def test_scrub_with_regex_success():
     assert b"414243" not in written_data
 
 def test_scrub_with_regex_exception(caplog):
+    """Test handling of a general exception during regex scrubbing."""
     with patch("builtins.open", side_effect=Exception("Unknown Error")):
         result = main.scrub_with_regex("in.pdf", "out.pdf")
         
@@ -167,6 +184,7 @@ def test_scrub_with_regex_exception(caplog):
     assert "Error using regex fallback: Unknown Error" in caplog.text
 
 def test_scrub_with_regex_file_not_found(caplog):
+    """Test handling of FileNotFoundError during regex scrubbing."""
     with patch("builtins.open", side_effect=FileNotFoundError()):
         result = main.scrub_with_regex("in.pdf", "out.pdf")
         
@@ -174,6 +192,7 @@ def test_scrub_with_regex_file_not_found(caplog):
     assert "Error using regex fallback: File not found" in caplog.text
 
 def test_scrub_with_regex_permission_error(caplog):
+    """Test handling of PermissionError during regex scrubbing."""
     with patch("builtins.open", side_effect=PermissionError()):
         result = main.scrub_with_regex("in.pdf", "out.pdf")
         
@@ -181,6 +200,7 @@ def test_scrub_with_regex_permission_error(caplog):
     assert "Error using regex fallback: Permission denied" in caplog.text
 
 def test_scrub_with_regex_os_error(caplog):
+    """Test handling of OSError during regex scrubbing."""
     with patch("builtins.open", side_effect=OSError("OS Error")):
         result = main.scrub_with_regex("in.pdf", "out.pdf")
         
@@ -189,6 +209,7 @@ def test_scrub_with_regex_os_error(caplog):
 
 @patch("sys.argv", ["main.py", "invalid.pdf"])
 def test_main_invalid_input(caplog):
+    """Test CLI fails when the input file does not exist."""
     with pytest.raises(SystemExit) as e:
         main.main()
     assert e.value.code == 1
@@ -198,6 +219,7 @@ def test_main_invalid_input(caplog):
 @patch("os.path.isfile", return_value=True)
 @patch("os.access", return_value=False)
 def test_main_unreadable_input(mock_access, mock_isfile, caplog):
+    """Test CLI fails when the input file is not readable."""
     with pytest.raises(SystemExit) as e:
         main.main()
     assert e.value.code == 1
@@ -207,6 +229,7 @@ def test_main_unreadable_input(mock_access, mock_isfile, caplog):
 @patch("os.path.isfile", return_value=True)
 @patch("os.access", return_value=True)
 def test_main_identical_paths(mock_access, mock_isfile, caplog):
+    """Test CLI fails when input and output paths are identical."""
     with pytest.raises(SystemExit) as e:
         main.main()
     assert e.value.code == 1
@@ -218,6 +241,7 @@ def test_main_identical_paths(mock_access, mock_isfile, caplog):
 @patch("os.path.isdir", return_value=False)
 @patch("os.path.dirname", return_value="some_dir")
 def test_main_output_dir_missing(mock_dirname, mock_isdir, mock_access, mock_isfile, caplog):
+    """Test CLI fails when the output directory does not exist."""
     with pytest.raises(SystemExit) as e:
         main.main()
     assert e.value.code == 1
@@ -230,6 +254,7 @@ def test_main_output_dir_missing(mock_dirname, mock_isdir, mock_access, mock_isf
 @patch("main.try_import_pypdf")
 @patch("main.scrub_with_pypdf")
 def test_main_pypdf_success(mock_scrub_pypdf, mock_try_import, mock_isdir, mock_access, mock_isfile, caplog):
+    """Test successful CLI execution using the pypdf library."""
     mock_try_import.return_value = (MagicMock(), "pypdf")
     mock_scrub_pypdf.return_value = True
     
@@ -248,6 +273,7 @@ def test_main_pypdf_success(mock_scrub_pypdf, mock_try_import, mock_isdir, mock_
 @patch("main.try_import_pypdf")
 @patch("main.scrub_with_regex")
 def test_main_regex_fallback_success(mock_scrub_regex, mock_try_import, mock_isdir, mock_access, mock_isfile, caplog):
+    """Test successful CLI execution using the regex fallback."""
     # Simulate pdfplumber or none to trigger fallback
     mock_try_import.return_value = (MagicMock(), "pdfplumber")
     mock_scrub_regex.return_value = True
@@ -269,6 +295,7 @@ def test_main_regex_fallback_success(mock_scrub_regex, mock_try_import, mock_isd
 @patch("main.scrub_with_pypdf")
 @patch("main.scrub_with_regex")
 def test_main_both_fail(mock_scrub_regex, mock_scrub_pypdf, mock_try_import, mock_isdir, mock_access, mock_isfile, caplog):
+    """Test CLI fails gracefully when both pypdf and regex methods fail."""
     mock_try_import.return_value = (MagicMock(), "pypdf")
     mock_scrub_pypdf.return_value = False
     mock_scrub_regex.return_value = False

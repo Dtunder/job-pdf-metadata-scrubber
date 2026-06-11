@@ -11,9 +11,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def try_import_pypdf():
-    """
-    Attempt to import a PDF library (pypdf, PyPDF2, or pdfplumber).
-    Returns the module and its name if successful, else (None, None).
+    """Attempt to import a PDF library (pypdf, PyPDF2, or pdfplumber).
+
+    This function attempts to load supported PDF libraries in a specific
+    order of preference: pypdf, PyPDF2, and finally pdfplumber.
+
+    Returns:
+        tuple: A tuple containing the imported module object and its
+            name as a string (e.g., (module, "pypdf")). If no library
+            can be imported, returns (None, None).
     """
     try:
         import pypdf
@@ -36,9 +42,16 @@ def try_import_pypdf():
     return None, None
 
 def validate_paths(input_path, output_path):
-    """
-    Validates the given input and output paths.
-    Raises TypeError or ValueError if the paths are invalid.
+    """Validate the given input and output paths.
+
+    Args:
+        input_path (str): The path to the input file.
+        output_path (str): The path to the output file.
+
+    Raises:
+        TypeError: If either input_path or output_path is not a string.
+        ValueError: If either path is empty or consists only of whitespace.
+        ValueError: If the absolute paths of input and output are identical.
     """
     if not isinstance(input_path, str) or not isinstance(output_path, str):
         raise TypeError("Input and output paths must be strings.")
@@ -48,9 +61,20 @@ def validate_paths(input_path, output_path):
         raise ValueError("Input and output paths cannot be identical.")
 
 def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
-    """
-    Scrub metadata from a PDF file using pypdf or PyPDF2.
-    Optimized by using append_pages_from_reader instead of a python loop.
+    """Scrub metadata from a PDF file using pypdf or PyPDF2.
+
+    This function reads a PDF, removes common metadata fields (Author,
+    Creator, Producer, Title), and writes the cleaned PDF to the output path.
+    It uses an optimized approach with `append_pages_from_reader`.
+
+    Args:
+        pdf_lib (module): The imported PDF library module (e.g., pypdf).
+        lib_name (str): The name of the library (e.g., "pypdf", "PyPDF2").
+        input_path (str): Path to the input PDF file.
+        output_path (str): Path where the cleaned PDF will be saved.
+
+    Returns:
+        bool: True if scrubbing was successful, False otherwise.
     """
     try:
         validate_paths(input_path, output_path)
@@ -93,9 +117,18 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
         return False
 
 def scrub_with_regex(input_path, output_path):
-    """
-    Scrub metadata using a regex fallback.
-    Optimized by combining regex patterns to reduce passes over data.
+    """Scrub metadata from a PDF file using regular expressions.
+
+    This acts as a fallback when no suitable PDF library is available for
+    writing. It reads the raw binary data of the PDF, finds common metadata
+    tags using regex, and clears their values.
+
+    Args:
+        input_path (str): Path to the input PDF file.
+        output_path (str): Path where the cleaned PDF will be saved.
+
+    Returns:
+        bool: True if scrubbing was successful, False otherwise.
     """
     try:
         validate_paths(input_path, output_path)
@@ -134,6 +167,12 @@ def scrub_with_regex(input_path, output_path):
         return False
 
 def main():
+    """Main entry point for the CLI tool.
+
+    Parses command-line arguments, validates file paths and permissions,
+    determines the best available method for metadata scrubbing (PDF library
+    vs. regex fallback), and executes the scrubbing process.
+    """
     parser = argparse.ArgumentParser(description="Scrub metadata (Author, Creator, Producer, Title) from a PDF file.")
     parser.add_argument("input_pdf", help="Path to the input PDF file")
     parser.add_argument("output_pdf", nargs="?", help="Path to the output PDF file (optional)")
