@@ -1,5 +1,7 @@
 # job-pdf-metadata-scrubber
 
+[![Tests Status](https://img.shields.io/badge/tests-passing-brightgreen)](#)
+
 CLI tool to scrub metadata from job application PDFs.
 
 ## Features

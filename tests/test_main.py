@@ -154,7 +154,6 @@ def test_scrub_with_regex_success():
     /Title <444546>
     """
 
-    mock_open = MagicMock()
     mock_file = MagicMock()
     mock_file.read.return_value = input_data
 
