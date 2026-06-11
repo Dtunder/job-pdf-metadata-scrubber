@@ -5,6 +5,8 @@ import re
 import sys
 from typing import Any, Optional, Tuple
 
+from resilience import retry
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -66,6 +68,7 @@ def validate_paths(input_path: str, output_path: str) -> None:
         raise ValueError("Input and output paths cannot be identical.")
 
 
+@retry(exceptions=(OSError,), max_attempts=3, base_delay=0.1)
 def scrub_with_pypdf(
     pdf_lib: Any, lib_name: str, input_path: str, output_path: str
 ) -> bool:
@@ -120,12 +123,13 @@ def scrub_with_pypdf(
         return False
     except OSError as e:
         logger.error(f"Error using {lib_name}: OS error occurred: {e}")
-        return False
+        raise
     except Exception as e:
         logger.error(f"Error using {lib_name}: {e}")
         return False
 
 
+@retry(exceptions=(OSError,), max_attempts=3, base_delay=0.1)
 def scrub_with_regex(input_path: str, output_path: str) -> bool:
     """Scrub metadata from a PDF file using regular expressions.
 
@@ -177,7 +181,7 @@ def scrub_with_regex(input_path: str, output_path: str) -> bool:
         return False
     except OSError as e:
         logger.error(f"Error using regex fallback: OS error occurred: {e}")
-        return False
+        raise
     except Exception as e:
         logger.error(f"Error using regex fallback: {e}")
         return False
@@ -230,13 +234,23 @@ def main() -> None:
     pdf_lib, lib_name = try_import_pypdf()
     success = False
 
+    from resilience import RetryExhaustedError
+
     if pdf_lib and lib_name in ["pypdf", "PyPDF2"]:
         logger.info(f"Using {lib_name} for metadata scrubbing...")
-        success = scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path)
+        try:
+            success = scrub_with_pypdf(
+                pdf_lib, lib_name, input_path, output_path
+            )
+        except RetryExhaustedError:
+            success = False
 
     if not success:
         logger.info("Using regex fallback for metadata scrubbing...")
-        success = scrub_with_regex(input_path, output_path)
+        try:
+            success = scrub_with_regex(input_path, output_path)
+        except RetryExhaustedError:
+            success = False
 
     if success:
         logger.info("Metadata successfully scrubbed!")
