@@ -4,6 +4,10 @@ import os
 import re
 
 def try_import_pypdf():
+    """
+    Attempt to import a PDF library (pypdf, PyPDF2, or pdfplumber).
+    Returns the module and its name if successful, else (None, None).
+    """
     try:
         import pypdf
         return pypdf, "pypdf"
@@ -25,6 +29,10 @@ def try_import_pypdf():
     return None, None
 
 def validate_paths(input_path, output_path):
+    """
+    Validates the given input and output paths.
+    Raises TypeError or ValueError if the paths are invalid.
+    """
     if not isinstance(input_path, str) or not isinstance(output_path, str):
         raise TypeError("Input and output paths must be strings.")
     if not input_path.strip() or not output_path.strip():
@@ -33,6 +41,10 @@ def validate_paths(input_path, output_path):
         raise ValueError("Input and output paths cannot be identical.")
 
 def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
+    """
+    Scrub metadata from a PDF file using pypdf or PyPDF2.
+    Optimized by using append_pages_from_reader instead of a python loop.
+    """
     try:
         validate_paths(input_path, output_path)
     except (TypeError, ValueError) as e:
@@ -47,8 +59,8 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
         reader = pdf_lib.PdfReader(input_path)
         writer = pdf_lib.PdfWriter()
         
-        for page in reader.pages:
-            writer.add_page(page)
+        # Optimize: Bulk append pages from the reader
+        writer.append_pages_from_reader(reader)
 
         writer.add_metadata({
             "/Author": "",
@@ -74,6 +86,10 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
         return False
 
 def scrub_with_regex(input_path, output_path):
+    """
+    Scrub metadata using a regex fallback.
+    Optimized by combining regex patterns to reduce passes over data.
+    """
     try:
         validate_paths(input_path, output_path)
     except (TypeError, ValueError) as e:
@@ -84,17 +100,15 @@ def scrub_with_regex(input_path, output_path):
         with open(input_path, "rb") as f:
             data = f.read()
 
-        tags = [b'Author', b'Creator', b'Producer', b'Title']
+        # Combine tags into a single pattern to avoid multiple passes over the string
+        # Match /Tag (value) handling escaped characters inside
+        # In PDF, strings in parentheses can contain escaped parens \( or \).
+        pattern_str = rb'/(Author|Creator|Producer|Title)\s*\((?:[^()\\]|\\.)*\)'
+        data = re.sub(pattern_str, rb'/\1 ()', data)
         
-        for tag in tags:
-            # Match /Tag (value) handling escaped characters inside
-            # In PDF, strings in parentheses can contain escaped parens \( or \).
-            pattern_str = rb'/' + tag + rb'\s*\((?:[^()\\]|\\.)*\)'
-            data = re.sub(pattern_str, rb'/' + tag + rb' ()', data)
-            
-            # PDF hex string format: /Tag <hex_value>
-            pattern_hex = rb'/' + tag + rb'\s*<[0-9a-fA-F]*>'
-            data = re.sub(pattern_hex, rb'/' + tag + rb' <>', data)
+        # PDF hex string format: /Tag <hex_value>
+        pattern_hex = rb'/(Author|Creator|Producer|Title)\s*<[0-9a-fA-F]*>'
+        data = re.sub(pattern_hex, rb'/\1 <>', data)
             
         with open(output_path, "wb") as f:
             f.write(data)

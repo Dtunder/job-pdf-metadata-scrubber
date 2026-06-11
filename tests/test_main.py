@@ -51,7 +51,7 @@ def test_scrub_with_pypdf_success():
     assert result is True
     mock_pdf_lib.PdfReader.assert_called_once_with("in.pdf")
     mock_pdf_lib.PdfWriter.assert_called_once()
-    assert mock_writer.add_page.call_count == 2
+    mock_writer.append_pages_from_reader.assert_called_once_with(mock_reader)
     mock_writer.add_metadata.assert_called_once_with({
         "/Author": "",
         "/Creator": "",
