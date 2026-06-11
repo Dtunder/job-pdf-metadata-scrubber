@@ -2,6 +2,13 @@ import argparse
 import sys
 import os
 import re
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def try_import_pypdf():
     """
@@ -48,11 +55,11 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
     try:
         validate_paths(input_path, output_path)
     except (TypeError, ValueError) as e:
-        print(f"Validation Error: {e}")
+        logger.error(f"Validation Error: {e}")
         return False
 
     if lib_name == "pdfplumber":
-        print("pdfplumber found but writing requires pypdf/PyPDF2. Falling back to regex.")
+        logger.warning("pdfplumber found but writing requires pypdf/PyPDF2. Falling back to regex.")
         return False
 
     try:
@@ -73,16 +80,16 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
             writer.write(f)
         return True
     except FileNotFoundError:
-        print(f"Error using {lib_name}: File not found '{input_path}'")
+        logger.error(f"Error using {lib_name}: File not found '{input_path}'")
         return False
     except PermissionError:
-        print(f"Error using {lib_name}: Permission denied when accessing '{input_path}' or '{output_path}'")
+        logger.error(f"Error using {lib_name}: Permission denied when accessing '{input_path}' or '{output_path}'")
         return False
     except OSError as e:
-        print(f"Error using {lib_name}: OS error occurred: {e}")
+        logger.error(f"Error using {lib_name}: OS error occurred: {e}")
         return False
     except Exception as e:
-        print(f"Error using {lib_name}: {e}")
+        logger.error(f"Error using {lib_name}: {e}")
         return False
 
 def scrub_with_regex(input_path, output_path):
@@ -93,7 +100,7 @@ def scrub_with_regex(input_path, output_path):
     try:
         validate_paths(input_path, output_path)
     except (TypeError, ValueError) as e:
-        print(f"Validation Error: {e}")
+        logger.error(f"Validation Error: {e}")
         return False
 
     try:
@@ -114,16 +121,16 @@ def scrub_with_regex(input_path, output_path):
             f.write(data)
         return True
     except FileNotFoundError:
-        print(f"Error using regex fallback: File not found '{input_path}'")
+        logger.error(f"Error using regex fallback: File not found '{input_path}'")
         return False
     except PermissionError:
-        print(f"Error using regex fallback: Permission denied when accessing '{input_path}' or '{output_path}'")
+        logger.error(f"Error using regex fallback: Permission denied when accessing '{input_path}' or '{output_path}'")
         return False
     except OSError as e:
-        print(f"Error using regex fallback: OS error occurred: {e}")
+        logger.error(f"Error using regex fallback: OS error occurred: {e}")
         return False
     except Exception as e:
-        print(f"Error using regex fallback: {e}")
+        logger.error(f"Error using regex fallback: {e}")
         return False
 
 def main():
@@ -135,11 +142,11 @@ def main():
     
     input_path = args.input_pdf
     if not os.path.isfile(input_path):
-        print(f"Error: Input file '{input_path}' does not exist.")
+        logger.error(f"Error: Input file '{input_path}' does not exist.")
         sys.exit(1)
     
     if not os.access(input_path, os.R_OK):
-        print(f"Error: Input file '{input_path}' is not readable.")
+        logger.error(f"Error: Input file '{input_path}' is not readable.")
         sys.exit(1)
         
     output_path = args.output_pdf
@@ -148,31 +155,31 @@ def main():
         output_path = f"{base}_clean{ext}"
         
     if os.path.abspath(input_path) == os.path.abspath(output_path):
-        print("Error: Input and output paths cannot be identical to prevent data loss.")
+        logger.error("Error: Input and output paths cannot be identical to prevent data loss.")
         sys.exit(1)
 
     output_dir = os.path.dirname(os.path.abspath(output_path))
     if output_dir and not os.path.isdir(output_dir):
-        print(f"Error: Output directory '{output_dir}' does not exist.")
+        logger.error(f"Error: Output directory '{output_dir}' does not exist.")
         sys.exit(1)
 
-    print(f"Processing '{input_path}' -> '{output_path}'")
+    logger.info(f"Processing '{input_path}' -> '{output_path}'")
 
     pdf_lib, lib_name = try_import_pypdf()
     success = False
     
     if pdf_lib and lib_name in ["pypdf", "PyPDF2"]:
-        print(f"Using {lib_name} for metadata scrubbing...")
+        logger.info(f"Using {lib_name} for metadata scrubbing...")
         success = scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path)
     
     if not success:
-        print("Using regex fallback for metadata scrubbing...")
+        logger.info("Using regex fallback for metadata scrubbing...")
         success = scrub_with_regex(input_path, output_path)
         
     if success:
-        print("Metadata successfully scrubbed!")
+        logger.info("Metadata successfully scrubbed!")
     else:
-        print("Failed to scrub metadata.")
+        logger.error("Failed to scrub metadata.")
         sys.exit(1)
 
 if __name__ == "__main__":
