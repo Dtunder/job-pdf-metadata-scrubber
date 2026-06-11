@@ -1,7 +1,8 @@
 import time
 import logging
-from typing import Callable, Any, Type, Tuple, TypeVar
+from typing import Callable, Any, Type, Tuple, TypeVar, Optional
 from functools import wraps
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,9 @@ class RetryExhaustedError(Exception):
 
 def retry(
     exceptions: Tuple[Type[Exception], ...] = (Exception,),
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    backoff_factor: float = 2.0,
+    max_attempts: Optional[int] = None,
+    base_delay: Optional[float] = None,
+    backoff_factor: Optional[float] = None,
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Retry decorator with exponential backoff.
 
@@ -32,26 +33,38 @@ def retry(
         Decorated function.
     """
 
+    _max_attempts = (
+        max_attempts if max_attempts is not None else config.RETRY_DEFAULT_MAX_ATTEMPTS
+    )
+    _base_delay = (
+        base_delay if base_delay is not None else config.RETRY_DEFAULT_BASE_DELAY
+    )
+    _backoff_factor = (
+        backoff_factor
+        if backoff_factor is not None
+        else config.RETRY_DEFAULT_BACKOFF_FACTOR
+    )
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
-            delay = base_delay
-            for attempt in range(1, max_attempts + 1):
+            delay = _base_delay
+            for attempt in range(1, _max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
-                    if attempt == max_attempts:
+                    if attempt == _max_attempts:
                         logger.error(
-                            f"Attempt {attempt}/{max_attempts} failed for {func.__name__}: {e}. Max retries exhausted."
+                            f"Attempt {attempt}/{_max_attempts} failed for {func.__name__}: {e}. Max retries exhausted."
                         )
                         raise RetryExhaustedError(
                             f"Max retries exhausted for {func.__name__}"
                         ) from e
                     logger.warning(
-                        f"Attempt {attempt}/{max_attempts} failed for {func.__name__}: {e}. Retrying in {delay}s..."
+                        f"Attempt {attempt}/{_max_attempts} failed for {func.__name__}: {e}. Retrying in {delay}s..."
                     )
                     time.sleep(delay)
-                    delay *= backoff_factor
+                    delay *= _backoff_factor
             # Fallback raise, should not be reached
             raise RetryExhaustedError("Unexpected retry exhaustion")
 

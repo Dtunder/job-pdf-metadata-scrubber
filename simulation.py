@@ -1,6 +1,7 @@
 import logging
 
 from resilience import retry, fallback, RetryExhaustedError
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -45,21 +46,27 @@ def local_fallback_processing() -> str:
     return "Processed locally (fallback)"
 
 
-@retry(exceptions=(ConnectionFailure,), max_attempts=4, base_delay=0.1)
+@retry(
+    exceptions=(ConnectionFailure,),
+    max_attempts=config.SIMULATION_CONNECT_MAX_ATTEMPTS,
+    base_delay=config.SIMULATION_CONNECT_BASE_DELAY,
+)
 def reliable_connect() -> str:
     logger.info("Attempting to connect...")
-    return simulator.connect(fail_times=2)
+    return simulator.connect(fail_times=config.SIMULATION_FAIL_TIMES)
 
 
-@fallback(
-    fallback_func=local_fallback_processing, exceptions=(RetryExhaustedError,)
+@fallback(fallback_func=local_fallback_processing, exceptions=(RetryExhaustedError,))
+@retry(
+    exceptions=(TimeoutError,),
+    max_attempts=config.SIMULATION_PROCESS_MAX_ATTEMPTS,
+    base_delay=config.SIMULATION_PROCESS_BASE_DELAY,
 )
-@retry(exceptions=(TimeoutError,), max_attempts=2, base_delay=0.1)
 def reliable_process() -> str:
     logger.info("Attempting to process data...")
     # This will fail twice if timeout_times is >= 2, triggering RetryExhaustedError
     # The fallback catches RetryExhaustedError and executes local_fallback_processing
-    return simulator.process_data(timeout_times=2)
+    return simulator.process_data(timeout_times=config.SIMULATION_TIMEOUT_TIMES)
 
 
 def execute_system_workflow() -> str:

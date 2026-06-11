@@ -1,0 +1,4 @@
+{
+    "SCRUB_MAX_ATTEMPTS": 3,
+    "SCRUB_BASE_DELAY": 0.1
+}

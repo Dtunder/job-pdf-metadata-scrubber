@@ -6,6 +6,7 @@ import sys
 from typing import Any, Optional, Tuple
 
 from resilience import retry
+from config import config
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -68,7 +69,11 @@ def validate_paths(input_path: str, output_path: str) -> None:
         raise ValueError("Input and output paths cannot be identical.")
 
 
-@retry(exceptions=(OSError,), max_attempts=3, base_delay=0.1)
+@retry(
+    exceptions=(OSError,),
+    max_attempts=config.SCRUB_MAX_ATTEMPTS,
+    base_delay=config.SCRUB_BASE_DELAY,
+)
 def scrub_with_pypdf(
     pdf_lib: Any, lib_name: str, input_path: str, output_path: str
 ) -> bool:
@@ -129,7 +134,11 @@ def scrub_with_pypdf(
         return False
 
 
-@retry(exceptions=(OSError,), max_attempts=3, base_delay=0.1)
+@retry(
+    exceptions=(OSError,),
+    max_attempts=config.SCRUB_MAX_ATTEMPTS,
+    base_delay=config.SCRUB_BASE_DELAY,
+)
 def scrub_with_regex(input_path: str, output_path: str) -> bool:
     """Scrub metadata from a PDF file using regular expressions.
 
@@ -157,9 +166,7 @@ def scrub_with_regex(input_path: str, output_path: str) -> bool:
         # Combine tags into a single pattern to avoid multiple passes over the string
         # Match /Tag (value) handling escaped characters inside
         # In PDF, strings in parentheses can contain escaped parens \( or \).
-        pattern_str = (
-            rb"/(Author|Creator|Producer|Title)\s*\((?:[^()\\]|\\.)*\)"
-        )
+        pattern_str = rb"/(Author|Creator|Producer|Title)\s*\((?:[^()\\]|\\.)*\)"
         data = re.sub(pattern_str, rb"/\1 ()", data)
 
         # PDF hex string format: /Tag <hex_value>
@@ -170,9 +177,7 @@ def scrub_with_regex(input_path: str, output_path: str) -> bool:
             f.write(data)
         return True
     except FileNotFoundError:
-        logger.error(
-            f"Error using regex fallback: File not found '{input_path}'"
-        )
+        logger.error(f"Error using regex fallback: File not found '{input_path}'")
         return False
     except PermissionError:
         logger.error(
@@ -239,9 +244,7 @@ def main() -> None:
     if pdf_lib and lib_name in ["pypdf", "PyPDF2"]:
         logger.info(f"Using {lib_name} for metadata scrubbing...")
         try:
-            success = scrub_with_pypdf(
-                pdf_lib, lib_name, input_path, output_path
-            )
+            success = scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path)
         except RetryExhaustedError:
             success = False
 
