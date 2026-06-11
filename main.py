@@ -24,7 +24,21 @@ def try_import_pypdf():
         
     return None, None
 
+def validate_paths(input_path, output_path):
+    if not isinstance(input_path, str) or not isinstance(output_path, str):
+        raise TypeError("Input and output paths must be strings.")
+    if not input_path.strip() or not output_path.strip():
+        raise ValueError("Input and output paths cannot be empty.")
+    if os.path.abspath(input_path) == os.path.abspath(output_path):
+        raise ValueError("Input and output paths cannot be identical.")
+
 def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
+    try:
+        validate_paths(input_path, output_path)
+    except (TypeError, ValueError) as e:
+        print(f"Validation Error: {e}")
+        return False
+
     if lib_name == "pdfplumber":
         print("pdfplumber found but writing requires pypdf/PyPDF2. Falling back to regex.")
         return False
@@ -46,11 +60,26 @@ def scrub_with_pypdf(pdf_lib, lib_name, input_path, output_path):
         with open(output_path, "wb") as f:
             writer.write(f)
         return True
+    except FileNotFoundError:
+        print(f"Error using {lib_name}: File not found '{input_path}'")
+        return False
+    except PermissionError:
+        print(f"Error using {lib_name}: Permission denied when accessing '{input_path}' or '{output_path}'")
+        return False
+    except OSError as e:
+        print(f"Error using {lib_name}: OS error occurred: {e}")
+        return False
     except Exception as e:
         print(f"Error using {lib_name}: {e}")
         return False
 
 def scrub_with_regex(input_path, output_path):
+    try:
+        validate_paths(input_path, output_path)
+    except (TypeError, ValueError) as e:
+        print(f"Validation Error: {e}")
+        return False
+
     try:
         with open(input_path, "rb") as f:
             data = f.read()
@@ -70,6 +99,15 @@ def scrub_with_regex(input_path, output_path):
         with open(output_path, "wb") as f:
             f.write(data)
         return True
+    except FileNotFoundError:
+        print(f"Error using regex fallback: File not found '{input_path}'")
+        return False
+    except PermissionError:
+        print(f"Error using regex fallback: Permission denied when accessing '{input_path}' or '{output_path}'")
+        return False
+    except OSError as e:
+        print(f"Error using regex fallback: OS error occurred: {e}")
+        return False
     except Exception as e:
         print(f"Error using regex fallback: {e}")
         return False
@@ -85,11 +123,24 @@ def main():
     if not os.path.isfile(input_path):
         print(f"Error: Input file '{input_path}' does not exist.")
         sys.exit(1)
+    
+    if not os.access(input_path, os.R_OK):
+        print(f"Error: Input file '{input_path}' is not readable.")
+        sys.exit(1)
         
     output_path = args.output_pdf
     if not output_path:
         base, ext = os.path.splitext(input_path)
         output_path = f"{base}_clean{ext}"
+        
+    if os.path.abspath(input_path) == os.path.abspath(output_path):
+        print("Error: Input and output paths cannot be identical to prevent data loss.")
+        sys.exit(1)
+
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    if output_dir and not os.path.isdir(output_dir):
+        print(f"Error: Output directory '{output_dir}' does not exist.")
+        sys.exit(1)
 
     print(f"Processing '{input_path}' -> '{output_path}'")
 

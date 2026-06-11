@@ -70,6 +70,57 @@ def test_scrub_with_pypdf_exception(capsys):
     captured = capsys.readouterr()
     assert "Error using pypdf: File read error" in captured.out
 
+def test_scrub_with_pypdf_file_not_found(capsys):
+    mock_pdf_lib = MagicMock()
+    mock_pdf_lib.PdfReader.side_effect = FileNotFoundError()
+    
+    result = main.scrub_with_pypdf(mock_pdf_lib, "pypdf", "in.pdf", "out.pdf")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using pypdf: File not found" in captured.out
+
+def test_scrub_with_pypdf_permission_error(capsys):
+    mock_pdf_lib = MagicMock()
+    mock_pdf_lib.PdfReader.side_effect = PermissionError()
+    
+    result = main.scrub_with_pypdf(mock_pdf_lib, "pypdf", "in.pdf", "out.pdf")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using pypdf: Permission denied" in captured.out
+
+def test_scrub_with_pypdf_os_error(capsys):
+    mock_pdf_lib = MagicMock()
+    mock_pdf_lib.PdfReader.side_effect = OSError("OS Error")
+    
+    result = main.scrub_with_pypdf(mock_pdf_lib, "pypdf", "in.pdf", "out.pdf")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using pypdf: OS error occurred" in captured.out
+
+def test_validate_paths_invalid_type():
+    with pytest.raises(TypeError):
+        main.validate_paths(123, "out.pdf")
+
+def test_validate_paths_empty_string():
+    with pytest.raises(ValueError):
+        main.validate_paths("  ", "out.pdf")
+
+def test_validate_paths_identical():
+    with pytest.raises(ValueError):
+        main.validate_paths("in.pdf", "in.pdf")
+
+def test_scrub_with_pypdf_validation_error(capsys):
+    result = main.scrub_with_pypdf(MagicMock(), "pypdf", 123, "out.pdf")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Validation Error:" in captured.out
+
+def test_scrub_with_regex_validation_error(capsys):
+    result = main.scrub_with_regex("in.pdf", "in.pdf")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Validation Error:" in captured.out
+
 def test_scrub_with_regex_success():
     input_data = b"""
     %PDF-1.4
@@ -116,12 +167,36 @@ def test_scrub_with_regex_success():
     assert b"414243" not in written_data
 
 def test_scrub_with_regex_exception(capsys):
-    with patch("builtins.open", side_effect=Exception("Permission denied")):
+    with patch("builtins.open", side_effect=Exception("Unknown Error")):
+        result = main.scrub_with_regex("in.pdf", "out.pdf")
+        
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using regex fallback: Unknown Error" in captured.out
+
+def test_scrub_with_regex_file_not_found(capsys):
+    with patch("builtins.open", side_effect=FileNotFoundError()):
+        result = main.scrub_with_regex("in.pdf", "out.pdf")
+        
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using regex fallback: File not found" in captured.out
+
+def test_scrub_with_regex_permission_error(capsys):
+    with patch("builtins.open", side_effect=PermissionError()):
         result = main.scrub_with_regex("in.pdf", "out.pdf")
         
     assert result is False
     captured = capsys.readouterr()
     assert "Error using regex fallback: Permission denied" in captured.out
+
+def test_scrub_with_regex_os_error(capsys):
+    with patch("builtins.open", side_effect=OSError("OS Error")):
+        result = main.scrub_with_regex("in.pdf", "out.pdf")
+        
+    assert result is False
+    captured = capsys.readouterr()
+    assert "Error using regex fallback: OS error occurred" in captured.out
 
 @patch("sys.argv", ["main.py", "invalid.pdf"])
 def test_main_invalid_input(capsys):
@@ -131,11 +206,45 @@ def test_main_invalid_input(capsys):
     captured = capsys.readouterr()
     assert "Error: Input file 'invalid.pdf' does not exist." in captured.out
 
+@patch("sys.argv", ["main.py", "valid.pdf"])
+@patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=False)
+def test_main_unreadable_input(mock_access, mock_isfile, capsys):
+    with pytest.raises(SystemExit) as e:
+        main.main()
+    assert e.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error: Input file 'valid.pdf' is not readable." in captured.out
+
+@patch("sys.argv", ["main.py", "valid.pdf", "valid.pdf"])
+@patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=True)
+def test_main_identical_paths(mock_access, mock_isfile, capsys):
+    with pytest.raises(SystemExit) as e:
+        main.main()
+    assert e.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error: Input and output paths cannot be identical to prevent data loss." in captured.out
+
 @patch("sys.argv", ["main.py", "valid.pdf", "out.pdf"])
 @patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=True)
+@patch("os.path.isdir", return_value=False)
+@patch("os.path.dirname", return_value="some_dir")
+def test_main_output_dir_missing(mock_dirname, mock_isdir, mock_access, mock_isfile, capsys):
+    with pytest.raises(SystemExit) as e:
+        main.main()
+    assert e.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error: Output directory 'some_dir' does not exist." in captured.out
+
+@patch("sys.argv", ["main.py", "valid.pdf", "out.pdf"])
+@patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=True)
+@patch("os.path.isdir", return_value=True)
 @patch("main.try_import_pypdf")
 @patch("main.scrub_with_pypdf")
-def test_main_pypdf_success(mock_scrub_pypdf, mock_try_import, mock_isfile, capsys):
+def test_main_pypdf_success(mock_scrub_pypdf, mock_try_import, mock_isdir, mock_access, mock_isfile, capsys):
     mock_try_import.return_value = (MagicMock(), "pypdf")
     mock_scrub_pypdf.return_value = True
     
@@ -149,9 +258,11 @@ def test_main_pypdf_success(mock_scrub_pypdf, mock_try_import, mock_isfile, caps
 
 @patch("sys.argv", ["main.py", "valid.pdf"])
 @patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=True)
+@patch("os.path.isdir", return_value=True)
 @patch("main.try_import_pypdf")
 @patch("main.scrub_with_regex")
-def test_main_regex_fallback_success(mock_scrub_regex, mock_try_import, mock_isfile, capsys):
+def test_main_regex_fallback_success(mock_scrub_regex, mock_try_import, mock_isdir, mock_access, mock_isfile, capsys):
     # Simulate pdfplumber or none to trigger fallback
     mock_try_import.return_value = (MagicMock(), "pdfplumber")
     mock_scrub_regex.return_value = True
@@ -167,10 +278,12 @@ def test_main_regex_fallback_success(mock_scrub_regex, mock_try_import, mock_isf
 
 @patch("sys.argv", ["main.py", "valid.pdf"])
 @patch("os.path.isfile", return_value=True)
+@patch("os.access", return_value=True)
+@patch("os.path.isdir", return_value=True)
 @patch("main.try_import_pypdf")
 @patch("main.scrub_with_pypdf")
 @patch("main.scrub_with_regex")
-def test_main_both_fail(mock_scrub_regex, mock_scrub_pypdf, mock_try_import, mock_isfile, capsys):
+def test_main_both_fail(mock_scrub_regex, mock_scrub_pypdf, mock_try_import, mock_isdir, mock_access, mock_isfile, capsys):
     mock_try_import.return_value = (MagicMock(), "pypdf")
     mock_scrub_pypdf.return_value = False
     mock_scrub_regex.return_value = False
